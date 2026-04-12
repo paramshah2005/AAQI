@@ -7,14 +7,19 @@ import { Loader2, RefreshCw, AlertCircle, Database, Clock, ChevronDown, CheckCir
 import { motion, AnimatePresence } from 'framer-motion';
 import { computeFinalAQI, ValidationResult, NormalizedAQIData } from '@/lib/aqiValidation';
 
-const CACHE_KEY = 'apna_aqi_cache';
-const CACHE_TTL = 5 * 60 * 1000; 
+const CACHE_KEY = 'eco_pulse_cache';
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in ms
 
 interface WeatherData {
   temp: number;
   humidity: number;
   aqi: number;
   pm25: number;
+  pm10?: number;
+  co?: number;
+  no2?: number;
+  o3?: number;
+  so2?: number;
   location: string;
   provider: string;
 }
@@ -45,6 +50,7 @@ export default function Home() {
       setIsRefreshing(true);
       const results: Record<string, WeatherData> = {};
       
+      // Fetch all providers in parallel (skipping 'validated' which is client-side only)
       const fetchPromises = PROVIDERS
         .filter(p => p.id !== 'validated')
         .map(async (p) => {
@@ -64,11 +70,16 @@ export default function Home() {
         }
       });
 
-      
+      // Perform Multi-Pollutant Validation
       const normalizedData: NormalizedAQIData[] = Object.entries(results).map(([id, data]) => ({
         source: id,
         aqi: data.aqi,
         pm25: data.pm25,
+        pm10: data.pm10,
+        co: data.co,
+        no2: data.no2,
+        o3: data.o3,
+        so2: data.so2,
       }));
 
       const validatedResult = computeFinalAQI(normalizedData);
@@ -91,7 +102,7 @@ export default function Home() {
   };
 
   const getLocationAndFetch = (force = false) => {
-    
+    // If we have coords and it's a forced refresh, fetch immediately
     if (force && lastCoords) {
       fetchAllData(lastCoords.lat, lastCoords.lon);
       return;
@@ -99,7 +110,7 @@ export default function Home() {
 
     setLoading(true);
     
-    
+    // Check Cache first
     const saved = localStorage.getItem(CACHE_KEY);
     if (saved && !force) {
       const parsed: CacheData = JSON.parse(saved);
@@ -133,17 +144,22 @@ export default function Home() {
     getLocationAndFetch();
   }, []);
 
-  
+  // Handle displayed data based on selection
   let activeData: WeatherData | null = null;
   
   if (selectedProvider === 'validated' && cache?.validated) {
-    
+    // For validated engine, we use its consensus pollutants but need temp/humidity/location from a primary provider
     const primaryId = cache.validated.sources_used[0] || Object.keys(cache.providers)[0];
     const primary = cache.providers[primaryId];
     activeData = {
       ...primary,
       aqi: cache.validated.final_aqi,
       pm25: cache.validated.final_pm25,
+      pm10: cache.validated.final_pm10 || 0,
+      co: cache.validated.final_co || 0,
+      no2: cache.validated.final_no2 || 0,
+      o3: cache.validated.final_o3 || 0,
+      so2: cache.validated.final_so2 || 0,
       provider: 'Validated Consensus'
     };
   } else {
@@ -218,16 +234,26 @@ export default function Home() {
             </motion.div>
           ) : activeData ? (
             <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-8 items-center w-full">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full items-stretch justify-items-center">
-                <WeatherCard 
-                  temp={activeData.temp} 
-                  humidity={activeData.humidity} 
-                  location={activeData.location || 'Unknown'} 
-                />
-                <AQICard 
-                  aqi={activeData.aqi} 
-                  pm25={activeData.pm25} 
-                />
+              <div className="flex flex-col lg:flex-row gap-8 w-full items-stretch justify-center h-full">
+                <div className="flex-1">
+                  <WeatherCard 
+                    temp={activeData.temp} 
+                    humidity={activeData.humidity} 
+                    location={activeData.location || 'Unknown'} 
+                  />
+                </div>
+                <div className="flex-[1.5]">
+                  <AQICard 
+                    aqi={activeData.aqi} 
+                    pm25={activeData.pm25}
+                    pm10={activeData.pm10}
+                    co={activeData.co}
+                    no2={activeData.no2}
+                    o3={activeData.o3}
+                    so2={activeData.so2}
+                    isValidated={selectedProvider === 'validated'}
+                  />
+                </div>
               </div>
 
               {selectedProvider === 'validated' && cache?.validated && (

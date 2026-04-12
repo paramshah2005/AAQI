@@ -47,6 +47,11 @@ async function handleOpenWeather(lat: string, lon: string) {
     humidity: weatherData.main.humidity,
     aqi: aqiData.list[0].main.aqi,
     pm25: aqiData.list[0].components.pm2_5,
+    pm10: aqiData.list[0].components.pm10,
+    co: aqiData.list[0].components.co,
+    no2: aqiData.list[0].components.no2,
+    o3: aqiData.list[0].components.o3,
+    so2: aqiData.list[0].components.so2,
     location: weatherData.name,
     provider: 'OpenWeather'
   });
@@ -68,6 +73,11 @@ async function handleWeatherAPI(lat: string, lon: string) {
     humidity: data.current.humidity,
     aqi: data.current.air_quality['us-epa-index'], 
     pm25: data.current.air_quality.pm2_5,
+    pm10: data.current.air_quality.pm10,
+    co: data.current.air_quality.co,
+    no2: data.current.air_quality.no2,
+    o3: data.current.air_quality.o3,
+    so2: data.current.air_quality.so2,
     location: data.location.name,
     provider: 'WeatherAPI.com'
   });
@@ -76,7 +86,7 @@ async function handleWeatherAPI(lat: string, lon: string) {
 async function handleOpenMeteo(lat: string, lon: string) {
   const [weatherRes, aqiRes] = await Promise.all([
     fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m`),
-    fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi,pm2_5`)
+    fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,ozone,sulphur_dioxide`)
   ]);
 
   if (!weatherRes.ok || !aqiRes.ok) throw new Error('Open-Meteo API failed');
@@ -88,6 +98,11 @@ async function handleOpenMeteo(lat: string, lon: string) {
     humidity: weatherData.current.relative_humidity_2m,
     aqi: aqiData.current.european_aqi > 100 ? 5 : aqiData.current.european_aqi > 75 ? 4 : aqiData.current.european_aqi > 50 ? 3 : aqiData.current.european_aqi > 25 ? 2 : 1,
     pm25: aqiData.current.pm2_5,
+    pm10: aqiData.current.pm10,
+    co: aqiData.current.carbon_monoxide,
+    no2: aqiData.current.nitrogen_dioxide,
+    o3: aqiData.current.ozone,
+    so2: aqiData.current.sulphur_dioxide,
     location: 'Calculated Coords',
     provider: 'Open-Meteo'
   });
