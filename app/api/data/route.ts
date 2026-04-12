@@ -11,13 +11,34 @@ export async function GET(request: Request) {
   }
 
   try {
+    if (provider === 'all') {
+      const results = await Promise.allSettled([
+        getOpenWeatherData(lat, lon),
+        getWeatherAPIData(lat, lon),
+        getOpenMeteoData(lat, lon),
+      ]);
+
+      const data: Record<string, any> = {};
+      results.forEach((res, idx) => {
+        const id = ['openweather', 'weatherapi', 'openmeteo'][idx];
+        if (res.status === 'fulfilled') {
+          data[id] = res.value;
+        } else {
+          console.error(`Provider ${id} failed:`, res.reason);
+          data[id] = { error: res.reason.message };
+        }
+      });
+
+      return NextResponse.json(data);
+    }
+
     switch (provider) {
       case 'openweather':
-        return await handleOpenWeather(lat, lon);
+        return NextResponse.json(await getOpenWeatherData(lat, lon));
       case 'weatherapi':
-        return await handleWeatherAPI(lat, lon);
+        return NextResponse.json(await getWeatherAPIData(lat, lon));
       case 'openmeteo':
-        return await handleOpenMeteo(lat, lon);
+        return NextResponse.json(await getOpenMeteoData(lat, lon));
       default:
         return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
     }
@@ -27,7 +48,7 @@ export async function GET(request: Request) {
   }
 }
 
-async function handleOpenWeather(lat: string, lon: string) {
+async function getOpenWeatherData(lat: string, lon: string) {
   const apiKey = process.env.OPENWEATHER_API_KEY;
   if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
     throw new Error('OpenWeather API Key not configured');
@@ -42,7 +63,7 @@ async function handleOpenWeather(lat: string, lon: string) {
 
   const [weatherData, aqiData] = await Promise.all([weatherRes.json(), aqiRes.json()]);
 
-  return NextResponse.json({
+  return {
     temp: Math.round(weatherData.main.temp),
     humidity: weatherData.main.humidity,
     aqi: aqiData.list[0].main.aqi,
@@ -54,10 +75,10 @@ async function handleOpenWeather(lat: string, lon: string) {
     so2: aqiData.list[0].components.so2,
     location: weatherData.name,
     provider: 'OpenWeather'
-  });
+  };
 }
 
-async function handleWeatherAPI(lat: string, lon: string) {
+async function getWeatherAPIData(lat: string, lon: string) {
   const apiKey = process.env.WEATHERAPI_API_KEY;
   if (!apiKey || apiKey === 'YOUR_WEATHERAPI_KEY_HERE') {
     throw new Error('WeatherAPI.com Key not configured');
@@ -68,10 +89,10 @@ async function handleWeatherAPI(lat: string, lon: string) {
 
   const data = await res.json();
 
-  return NextResponse.json({
+  return {
     temp: Math.round(data.current.temp_c),
     humidity: data.current.humidity,
-    aqi: data.current.air_quality['us-epa-index'], // 1-6 scale
+    aqi: data.current.air_quality['us-epa-index'],
     pm25: data.current.air_quality.pm2_5,
     pm10: data.current.air_quality.pm10,
     co: data.current.air_quality.co,
@@ -80,10 +101,10 @@ async function handleWeatherAPI(lat: string, lon: string) {
     so2: data.current.air_quality.so2,
     location: data.location.name,
     provider: 'WeatherAPI.com'
-  });
+  };
 }
 
-async function handleOpenMeteo(lat: string, lon: string) {
+async function getOpenMeteoData(lat: string, lon: string) {
   const [weatherRes, aqiRes] = await Promise.all([
     fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m`),
     fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,ozone,sulphur_dioxide`)
@@ -93,7 +114,7 @@ async function handleOpenMeteo(lat: string, lon: string) {
 
   const [weatherData, aqiData] = await Promise.all([weatherRes.json(), aqiRes.json()]);
 
-  return NextResponse.json({
+  return {
     temp: Math.round(weatherData.current.temperature_2m),
     humidity: weatherData.current.relative_humidity_2m,
     aqi: aqiData.current.european_aqi > 100 ? 5 : aqiData.current.european_aqi > 75 ? 4 : aqiData.current.european_aqi > 50 ? 3 : aqiData.current.european_aqi > 25 ? 2 : 1,
@@ -105,5 +126,5 @@ async function handleOpenMeteo(lat: string, lon: string) {
     so2: aqiData.current.sulphur_dioxide,
     location: 'Calculated Coords',
     provider: 'Open-Meteo'
-  });
+  };
 }

@@ -51,30 +51,26 @@ export default function Home() {
   const fetchAllData = async (lat: number, lon: number) => {
     try {
       setIsRefreshing(true);
-      const results: Record<string, WeatherData> = {};
       
-      // Fetch all providers in parallel (skipping 'validated' which is client-side only)
-      const fetchPromises = PROVIDERS
-        .filter(p => p.id !== 'validated')
-        .map(async (p) => {
-        try {
-          const res = await fetch(`/api/data?lat=${lat}&lon=${lon}&provider=${p.id}`);
-          if (!res.ok) return null;
-          return { id: p.id, data: await res.json() };
-        } catch {
-          return null;
-        }
-      });
+      // Round coordinates to 4 decimal places to stabilize fetches
+      const rLat = Math.round(lat * 10000) / 10000;
+      const rLon = Math.round(lon * 10000) / 10000;
 
-      const responses = await Promise.all(fetchPromises);
-      responses.forEach((r) => {
-        if (r && !r.data.error) {
-          results[r.id] = r.data;
+      const res = await fetch(`/api/data?lat=${rLat}&lon=${rLon}&provider=all`);
+      if (!res.ok) throw new Error('Bulk fetch failed');
+      
+      const results = await res.json();
+      
+      // Filter out providers that returned errors
+      const validResults: Record<string, WeatherData> = {};
+      Object.entries(results).forEach(([id, data]: [string, any]) => {
+        if (!data.error) {
+          validResults[id] = data;
         }
       });
 
       // Perform Multi-Pollutant Validation
-      const normalizedData: NormalizedAQIData[] = Object.entries(results).map(([id, data]) => ({
+      const normalizedData: NormalizedAQIData[] = Object.entries(validResults).map(([id, data]) => ({
         source: id,
         aqi: data.aqi,
         pm25: data.pm25,
@@ -98,7 +94,7 @@ export default function Home() {
 
       const newCache: CacheData = {
         timestamp: Date.now(),
-        providers: results,
+        providers: validResults,
         validated: validatedResult,
         recommendations
       };
