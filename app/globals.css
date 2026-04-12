@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --background: #0f172a;
+  --foreground: #f8fafc;
+}
+
+body {
+  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+  color: var(--foreground);
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+}
