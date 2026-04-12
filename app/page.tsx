@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { WeatherCard } from '@/components/WeatherCard';
 import { AQICard } from '@/components/AQICard';
-import { Loader2, RefreshCw, AlertCircle, Database, Clock, ChevronDown } from 'lucide-react';
+import { Loader2, RefreshCw, AlertCircle, Database, Clock, ChevronDown, CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { computeFinalAQI, ValidationResult, NormalizedAQIData } from '@/lib/aqiValidation';
 
-const CACHE_KEY = 'eco_pulse_cache';
+const CACHE_KEY = 'apna_aqi_cache';
 const CACHE_TTL = 5 * 60 * 1000; 
 
 interface WeatherData {
@@ -21,9 +22,11 @@ interface WeatherData {
 interface CacheData {
   timestamp: number;
   providers: Record<string, WeatherData>;
+  validated?: ValidationResult;
 }
 
 const PROVIDERS = [
+  { id: 'validated', name: 'Validated Engine' },
   { id: 'openweather', name: 'OpenWeather' },
   { id: 'weatherapi', name: 'WeatherAPI.com' },
   { id: 'openmeteo', name: 'Open-Meteo' },
@@ -31,17 +34,20 @@ const PROVIDERS = [
 
 export default function Home() {
   const [cache, setCache] = useState<CacheData | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState('openweather');
+  const [selectedProvider, setSelectedProvider] = useState('validated');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastCoords, setLastCoords] = useState<{lat: number, lon: number} | null>(null);
 
   const fetchAllData = async (lat: number, lon: number) => {
     try {
       setIsRefreshing(true);
       const results: Record<string, WeatherData> = {};
       
-      const fetchPromises = PROVIDERS.map(async (p) => {
+      const fetchPromises = PROVIDERS
+        .filter(p => p.id !== 'validated')
+        .map(async (p) => {
         try {
           const res = await fetch(`/api/data?lat=${lat}&lon=${lon}&provider=${p.id}`);
           if (!res.ok) return null;
@@ -58,13 +64,19 @@ export default function Home() {
         }
       });
 
-      if (Object.keys(results).length === 0) {
-        throw new Error('All weather providers failed to fetch data');
-      }
+      
+      const normalizedData: NormalizedAQIData[] = Object.entries(results).map(([id, data]) => ({
+        source: id,
+        aqi: data.aqi,
+        pm25: data.pm25,
+      }));
 
-      const newCache = {
+      const validatedResult = computeFinalAQI(normalizedData);
+
+      const newCache: CacheData = {
         timestamp: Date.now(),
-        providers: results
+        providers: results,
+        validated: validatedResult
       };
 
       localStorage.setItem(CACHE_KEY, JSON.stringify(newCache));
@@ -79,7 +91,14 @@ export default function Home() {
   };
 
   const getLocationAndFetch = (force = false) => {
+    
+    if (force && lastCoords) {
+      fetchAllData(lastCoords.lat, lastCoords.lon);
+      return;
+    }
+
     setLoading(true);
+    
     
     const saved = localStorage.getItem(CACHE_KEY);
     if (saved && !force) {
@@ -99,7 +118,9 @@ export default function Home() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        fetchAllData(position.coords.latitude, position.coords.longitude);
+        const coords = { lat: position.coords.latitude, lon: position.coords.longitude };
+        setLastCoords(coords);
+        fetchAllData(coords.lat, coords.lon);
       },
       (err) => {
         setError('Location access denied. Please enable location services.');
@@ -112,7 +133,22 @@ export default function Home() {
     getLocationAndFetch();
   }, []);
 
-  const activeData = cache?.providers[selectedProvider] || (cache ? Object.values(cache.providers)[0] : null);
+  
+  let activeData: WeatherData | null = null;
+  
+  if (selectedProvider === 'validated' && cache?.validated) {
+    
+    const primaryId = cache.validated.sources_used[0] || Object.keys(cache.providers)[0];
+    const primary = cache.providers[primaryId];
+    activeData = {
+      ...primary,
+      aqi: cache.validated.final_aqi,
+      pm25: cache.validated.final_pm25,
+      provider: 'Validated Consensus'
+    };
+  } else {
+    activeData = cache?.providers[selectedProvider] || (cache ? Object.values(cache.providers)[0] : null);
+  }
   const lastUpdated = cache ? new Date(cache.timestamp).toLocaleTimeString() : '';
   const isFromCache = cache ? (Date.now() - cache.timestamp < CACHE_TTL) : false;
 
@@ -129,7 +165,7 @@ export default function Home() {
         <header className="flex flex-col md:flex-row items-center justify-between mb-12 gap-6 bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
           <div className="text-left">
             <h1 className="text-3xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">
-              Eco Pulse
+              Apna AQI
             </h1>
             <p className="text-white/40 text-sm font-medium">Multi-Source Intelligence</p>
           </div>
@@ -181,7 +217,7 @@ export default function Home() {
               <button onClick={() => getLocationAndFetch(true)} className="px-8 py-3 bg-white text-slate-900 rounded-full font-bold">Retry</button>
             </motion.div>
           ) : activeData ? (
-            <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-8 items-center">
+            <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-8 items-center w-full">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full items-stretch justify-items-center">
                 <WeatherCard 
                   temp={activeData.temp} 
@@ -193,6 +229,42 @@ export default function Home() {
                   pm25={activeData.pm25} 
                 />
               </div>
+
+              {selectedProvider === 'validated' && cache?.validated && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-2xl bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-sm"
+                >
+                  <div className="flex flex-wrap items-center justify-center gap-6">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Sources Included:</span>
+                      <div className="flex gap-2">
+                        {cache.validated.sources_used.map(s => (
+                          <div key={s} className="flex items-center gap-1 bg-green-500/10 text-green-400 text-[10px] px-2 py-1 rounded-md border border-green-500/20 uppercase font-bold">
+                            <CheckCircle2 size={10} />
+                            {s}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {cache.validated.sources_discarded.length > 0 && (
+                      <div className="flex items-center gap-3 border-l border-white/10 pl-6">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Outliers Removed:</span>
+                        <div className="flex gap-2">
+                          {cache.validated.sources_discarded.map(s => (
+                            <div key={s} className="flex items-center gap-1 bg-red-500/10 text-red-400 text-[10px] px-2 py-1 rounded-md border border-red-500/20 uppercase font-bold">
+                              <XCircle size={10} />
+                              {s}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
 
               <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10 backdrop-blur-sm">
                 <Database size={14} className="text-blue-400" />
