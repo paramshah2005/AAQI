@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Apna AQI",
-  description: "Environmental dashboard for air quality monitoring",
+  description: "Multi-Source Intelligence Environmental Dashboard",
 };
 
 export default function RootLayout({

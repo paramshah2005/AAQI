@@ -71,7 +71,7 @@ async function handleWeatherAPI(lat: string, lon: string) {
   return NextResponse.json({
     temp: Math.round(data.current.temp_c),
     humidity: data.current.humidity,
-    aqi: data.current.air_quality['us-epa-index'], 
+    aqi: data.current.air_quality['us-epa-index'], // 1-6 scale
     pm25: data.current.air_quality.pm2_5,
     pm10: data.current.air_quality.pm10,
     co: data.current.air_quality.co,

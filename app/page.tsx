@@ -6,8 +6,10 @@ import { AQICard } from '@/components/AQICard';
 import { Loader2, RefreshCw, AlertCircle, Database, Clock, ChevronDown, CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { computeFinalAQI, ValidationResult, NormalizedAQIData } from '@/lib/aqiValidation';
+import { HealthInsights } from '@/components/HealthInsights';
+import { generateHealthRecommendations, RecommendationResult } from '@/lib/recommendationEngine';
 
-const CACHE_KEY = 'eco_pulse_cache';
+const CACHE_KEY = 'apna_aqi_cache';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in ms
 
 interface WeatherData {
@@ -28,6 +30,7 @@ interface CacheData {
   timestamp: number;
   providers: Record<string, WeatherData>;
   validated?: ValidationResult;
+  recommendations?: RecommendationResult;
 }
 
 const PROVIDERS = [
@@ -83,11 +86,21 @@ export default function Home() {
       }));
 
       const validatedResult = computeFinalAQI(normalizedData);
+      
+      const recommendations = generateHealthRecommendations({
+        pm25: validatedResult.final_pm25,
+        pm10: validatedResult.final_pm10 || 0,
+        co: validatedResult.final_co || 0,
+        no2: validatedResult.final_no2 || 0,
+        o3: validatedResult.final_o3 || 0,
+        so2: validatedResult.final_so2 || 0,
+      });
 
       const newCache: CacheData = {
         timestamp: Date.now(),
         providers: results,
-        validated: validatedResult
+        validated: validatedResult,
+        recommendations
       };
 
       localStorage.setItem(CACHE_KEY, JSON.stringify(newCache));
@@ -255,6 +268,10 @@ export default function Home() {
                   />
                 </div>
               </div>
+
+              {cache?.recommendations && (
+                <HealthInsights data={cache.recommendations} />
+              )}
 
               {selectedProvider === 'validated' && cache?.validated && (
                 <motion.div 

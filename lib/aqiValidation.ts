@@ -21,7 +21,9 @@ export interface ValidationResult {
   sources_discarded: string[];
 }
 
-
+/**
+ * Calculates Q1, Q3 and IQR from a sorted array of numbers
+ */
 export function calculateIQR(values: number[]): { q1: number; q3: number; iqr: number } {
   const sorted = [...values].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
@@ -29,7 +31,9 @@ export function calculateIQR(values: number[]): { q1: number; q3: number; iqr: n
   return { q1, q3, iqr: q3 - q1 };
 }
 
-
+/**
+ * Generic pollutant validation logic (IQR + Consistency Check)
+ */
 function validatePollutant(data: NormalizedAQIData[], key: keyof Omit<NormalizedAQIData, 'source'>): { value: number | null; discarded: string[] } {
   const validEntries = data.filter(d => d[key] !== undefined && d[key] !== null);
   if (validEntries.length === 0) return { value: null, discarded: [] };
@@ -43,14 +47,16 @@ function validatePollutant(data: NormalizedAQIData[], key: keyof Omit<Normalized
   const remaining = validEntries.filter(d => (d[key] as number) >= lowerBound && (d[key] as number) <= upperBound);
   const discarded = validEntries.filter(d => (d[key] as number) < lowerBound || (d[key] as number) > upperBound);
 
-  
+  // Fallback to original dataset if fewer than 2 remain after outlier removal
   const finalSet = remaining.length < 2 ? validEntries : remaining;
   const discardedNames = remaining.length < 2 ? [] : discarded.map(d => d.source);
 
   const finalValues = finalSet.map(d => d[key] as number);
   const maxDiff = Math.max(...finalValues) - Math.min(...finalValues);
   
-
+  // Consistency check: use median if spread > 100 (for AQI) or a scaled threshold for others
+  // Requirement says "if spread > threshold", but only defines 100 for AQI. 
+  // We'll use 100 as the global threshold for now or scale it if needed.
   const threshold = 100; 
 
   const calculateMedian = (v: number[]) => {
@@ -69,7 +75,9 @@ function validatePollutant(data: NormalizedAQIData[], key: keyof Omit<Normalized
   };
 }
 
-
+/**
+ * Computes the final validated result for all pollutants
+ */
 export function computeFinalAQI(data: NormalizedAQIData[]): ValidationResult {
   const aqiVal = validatePollutant(data, 'aqi');
   const pm25Val = validatePollutant(data, 'pm25');
@@ -79,7 +87,7 @@ export function computeFinalAQI(data: NormalizedAQIData[]): ValidationResult {
   const o3Val = validatePollutant(data, 'o3');
   const so2Val = validatePollutant(data, 'so2');
 
-  
+  // Track sources used/discarded (based on AQI as the primary anchor)
   const aqiValidEntries = data.filter(d => d.aqi !== undefined && d.aqi !== null);
   const { q1, q3, iqr } = calculateIQR(aqiValidEntries.map(d => d.aqi));
   const lb = q1 - 1.5 * iqr;
