@@ -7,7 +7,7 @@
 }
 
 body {
-  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+  background: #0a1020;
   color: var(--foreground);
   min-height: 100vh;
   font-family: 'Inter', sans-serif;

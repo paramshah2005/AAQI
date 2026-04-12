@@ -60,7 +60,7 @@ export const HealthInsights: React.FC<HealthInsightsProps> = ({ data }) => {
         
         <div className="flex-1 md:max-w-md text-center md:text-right">
           <p className="text-white/80 font-medium leading-relaxed italic">
-            "{overall}"
+            &quot;{overall}&quot;
           </p>
         </div>
       </div>

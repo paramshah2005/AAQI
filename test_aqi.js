@@ -1,4 +1,5 @@
-export interface NormalizedAQIData {
+
+interface NormalizedAQIData {
   source: string;
   aqi: number;
   pm25: number;
@@ -9,7 +10,7 @@ export interface NormalizedAQIData {
   so2?: number;
 }
 
-export interface SourceAQIInfo {
+interface SourceAQIInfo {
   source: string;
   aqi: number;
   used: boolean;
@@ -18,7 +19,7 @@ export interface SourceAQIInfo {
   cosine_passed: boolean;
 }
 
-export interface ValidationResult {
+interface ValidationResult {
   final_aqi: number;
   final_pm25: number;
   final_pm10: number | null;
@@ -36,7 +37,7 @@ export interface ValidationResult {
 /**
  * Calculates Q1, Q3 and IQR from a sorted array of numbers
  */
-export function calculateIQR(values: number[]): { q1: number; q3: number; iqr: number } {
+function calculateIQR(values: number[]): { q1: number; q3: number; iqr: number } {
   const sorted = [...values].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
@@ -129,13 +130,13 @@ function median(values: number[]): number {
  * Normalizes values to prevent any single pollutant from dominating.
  */
 function buildPollutantVector(data: NormalizedAQIData): number[] {
-  // Use AQI and PM2.5 as the primary vector components to prevent sparse arrays.
-  // This guarantees vectors are 2D and dense, protecting against mathematically 
-  // catastrophic orthogonal vectors (which cause 0% scores) 
-  // caused by different APIs omitting different pollutants (like NO2, O3, CO).
   return [
-    data.aqi,
-    data.pm25 || (data.aqi / 3),
+    data.pm25 || 0,
+    (data.pm10 || 0) * 0.5,    // Scale down PM10 (typically larger values)
+    (data.no2 || 0),
+    (data.o3 || 0),
+    (data.co || 0) * 0.01,     // Scale down CO (µg/m³ can be very large)
+    (data.so2 || 0),
   ];
 }
 
@@ -211,7 +212,7 @@ function validatePollutant(data: NormalizedAQIData[], key: keyof Omit<Normalized
  * 3. Sources failing either check are discarded (if enough remain)
  * 4. Final values computed from remaining trusted sources
  */
-export function computeFinalAQI(data: NormalizedAQIData[]): ValidationResult {
+function computeFinalAQI(data: NormalizedAQIData[]): ValidationResult {
   const COSINE_THRESHOLD = 0.7;
 
   // === Step 1: IQR on AQI values ===
@@ -308,3 +309,6 @@ export function computeFinalAQI(data: NormalizedAQIData[]): ValidationResult {
     validation_method: methods.join(' + '),
   };
 }
+
+const data = [{"source":"openweather","aqi":59,"pm25":15.6},{"source":"weatherapi","aqi":109,"pm25":38.3},{"source":"openmeteo","aqi":96,"pm25":33.2}];
+console.log(JSON.stringify(computeFinalAQI(data).per_source_info, null, 2));

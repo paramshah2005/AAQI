@@ -1,6 +1,7 @@
 import React from 'react';
 import { Wind, Activity, Zap, Beaker, Cloud, Thermometer } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getAQICategory } from '@/lib/aqiUtils';
 
 interface AQICardProps {
   aqi: number;
@@ -21,7 +22,7 @@ export const AQICard: React.FC<AQICardProps> = ({
   no2, 
   o3, 
   so2,
-  isValidated = true 
+  isValidated = true
 }) => {
   const getAQIInfo = (val: number) => {
     if (val <= 1) return { label: 'Good', color: 'bg-green-500', text: 'text-green-500', bg: 'bg-green-500/20' };
@@ -52,8 +53,8 @@ export const AQICard: React.FC<AQICardProps> = ({
           <Wind size={18} />
           <span className="text-sm font-medium tracking-wide uppercase">Pollutant Analysis</span>
         </div>
-        <div className={`px-4 py-1.5 rounded-full ${info.bg} ${info.text} text-[10px] font-black uppercase tracking-[0.2em] border border-white/5`}>
-          {info.label} Severity
+        <div className={`px-4 py-1.5 rounded-full ${info.bg} ${info.color} text-[10px] font-black uppercase tracking-[0.2em] border border-white/5`}>
+          {info.label}
         </div>
       </div>
 

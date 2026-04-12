@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model AqiReport {
+  id        Int      @id @default(autoincrement())
+  areaName  String
+  lat       Float
+  lon       Float
+  category  String   // "Low", "Medium", "High", "Very High", "Severe"
+  sources   String   // JSON string of sources and their 1-5 scales
+  createdAt DateTime @default(now())
+}
