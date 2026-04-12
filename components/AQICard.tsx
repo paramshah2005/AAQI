@@ -46,10 +46,10 @@ export const AQICard: React.FC<AQICardProps> = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className="bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-3xl shadow-2xl text-white w-full max-w-2xl h-full flex flex-col"
+      className="bg-slate-900/40 backdrop-blur-xl border border-white/10 p-6 rounded-3xl shadow-2xl text-white w-full max-w-2xl h-full flex flex-col"
     >
       <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-2 text-white/70">
+        <div className="flex items-center gap-2 text-white/90">
           <Wind size={18} />
           <span className="text-sm font-medium tracking-wide uppercase">Pollutant Analysis</span>
         </div>
@@ -66,11 +66,11 @@ export const AQICard: React.FC<AQICardProps> = ({
                 <div className={`p-1.5 rounded-lg bg-white/5`}>
                   <p.icon size={16} className={`${p.color} opacity-70 group-hover:opacity-100 transition-opacity`} />
                 </div>
-                <span className="text-xs font-bold text-white/30 uppercase tracking-widest">{p.label}</span>
+                <span className="text-xs font-bold text-white/70 uppercase tracking-widest">{p.label}</span>
               </div>
               <div className="flex items-baseline gap-1 mt-1">
                 <span className="text-2xl font-black tracking-tight">{p.value !== undefined && p.value !== null ? p.value : '--'}</span>
-                <span className="text-xs text-white/20 font-bold uppercase">{p.unit}</span>
+                <span className="text-xs text-white/50 font-bold uppercase">{p.unit}</span>
               </div>
             </div>
           ))}

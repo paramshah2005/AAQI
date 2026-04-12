@@ -14,6 +14,7 @@ import { predictFeelsLikeAQI, FeelsLikeResult, AQIHistoryPoint, computeFeelsLike
 import { trainModel, TrainedModel } from '@/lib/mlRegression';
 import { ReportModal } from '@/components/ReportModal';
 import { GlobeBackground } from '@/components/GlobeBackground';
+import { LocationSelector } from '@/components/LocationSelector';
 
 const CACHE_KEY = 'eco_pulse_cache_v4';
 const MODEL_CACHE_KEY = 'eco_pulse_trained_model_v2';
@@ -36,6 +37,7 @@ interface WeatherData {
   so2?: number;
   location: string;
   provider: string;
+  condition?: string;
 }
 
 interface CacheData {
@@ -72,12 +74,13 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastCoords, setLastCoords] = useState<{lat: number, lon: number} | null>(null);
+  const [lastCoords, setLastCoords] = useState<{ lat: number, lon: number } | null>(null);
   const [trendHistory, setTrendHistory] = useState<AQIHistoryPoint[]>([]);
   const [trainedModel, setTrainedModel] = useState<TrainedModel | null>(null);
   const [isTraining, setIsTraining] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [globeOpacity, setGlobeOpacity] = useState(0);
+  const [isManualLocation, setIsManualLocation] = useState(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const isInitialLoading = loading && !cache;
@@ -99,7 +102,7 @@ export default function Home() {
           return parsed.model;
         }
       }
-    } catch {}
+    } catch { }
 
     try {
       setIsTraining(true);
@@ -199,7 +202,7 @@ export default function Home() {
   const fetchAllData = useCallback(async (lat: number, lon: number, model: TrainedModel | null) => {
     try {
       setIsRefreshing(true);
-      
+
       // Round coordinates to 4 decimal places to stabilize fetches
       const rLat = Math.round(lat * 10000) / 10000;
       const rLon = Math.round(lon * 10000) / 10000;
@@ -208,7 +211,7 @@ export default function Home() {
       if (!res.ok) throw new Error('Bulk fetch failed');
 
       const results = await res.json();
-      
+
       // Filter out providers that returned errors
       const validResults: Record<string, WeatherData> = {};
       Object.entries(results as Record<string, WeatherData & { error?: string }>).forEach(([id, data]) => {
@@ -283,24 +286,33 @@ export default function Home() {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       setError(errorMessage);
       setGlobeOpacity(1);
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
     }
-  }, []);
+  }, [trainMLModel]);
+  
+  const fetchDataForCoords = useCallback(async (lat: number, lon: number) => {
+    const model = await trainMLModel(lat, lon);
+    await Promise.all([
+      fetchAllData(lat, lon, model),
+      fetchHistoricalData(lat, lon, model)
+    ]);
+  }, [trainMLModel, fetchAllData, fetchHistoricalData]);
 
-  const getLocationAndFetch = useCallback((force = false) => {
+  const getLocationAndFetch = useCallback((force = false, customCoords?: { lat: number, lon: number }) => {
+    if (customCoords) {
+      setLastCoords(customCoords);
+      setIsManualLocation(true);
+      fetchDataForCoords(customCoords.lat, customCoords.lon);
+      return;
+    }
+
     if (force && lastCoords) {
       // Re-train + re-fetch
-      trainMLModel(lastCoords.lat, lastCoords.lon).then(model => {
-        fetchAllData(lastCoords.lat, lastCoords.lon, model);
-        fetchHistoricalData(lastCoords.lat, lastCoords.lon, model);
-      });
+      fetchDataForCoords(lastCoords.lat, lastCoords.lon);
       return;
     }
 
     setLoading(true);
-    
+
     // Check cache for quick load
     const saved = localStorage.getItem(CACHE_KEY);
     if (saved && !force) {
@@ -313,7 +325,7 @@ export default function Home() {
           try {
             const modelCache = localStorage.getItem(MODEL_CACHE_KEY);
             if (modelCache) setTrainedModel(JSON.parse(modelCache).model);
-          } catch {}
+          } catch { }
           setLoading(false);
           setGlobeOpacity(1);
           // Still get location silently so the globe can fly to the user's position
@@ -322,7 +334,7 @@ export default function Home() {
           });
           return;
         }
-      } catch {}
+      } catch { }
     }
 
     if (!navigator.geolocation) {
@@ -335,19 +347,15 @@ export default function Home() {
       (position) => {
         const coords = { lat: position.coords.latitude, lon: position.coords.longitude };
         setLastCoords(coords);
-
-        // Pipeline: Train model → Fetch current data → Fetch history
-        trainMLModel(coords.lat, coords.lon).then(model => {
-          fetchAllData(coords.lat, coords.lon, model);
-          fetchHistoricalData(coords.lat, coords.lon, model);
-        });
+        setIsManualLocation(false);
+        fetchDataForCoords(coords.lat, coords.lon);
       },
       () => {
         setError('Location access denied. Please enable location services.');
         setLoading(false);
       }
     );
-  }, [lastCoords, fetchAllData, fetchHistoricalData, trainMLModel]);
+  }, [lastCoords, fetchDataForCoords]);
 
   // Grab location immediately on mount so the globe can spin → fly right away,
   // completely independent of the API data fetch timeline.
@@ -407,6 +415,21 @@ export default function Home() {
   } else {
     activeData = cache?.providers[selectedProvider] || (cache ? Object.values(cache.providers)[0] : null);
   }
+
+  const getBackgroundType = (condition?: string) => {
+    // Night logic: 7 PM to 6 AM
+    const hour = new Date().getHours();
+    if (hour >= 19 || hour <= 6) return 'night';
+
+    if (!condition) return 'sunny';
+    const c = condition.toLowerCase();
+    if (c.includes('rain') || c.includes('drizzle') || c.includes('storm')) return 'rainy';
+    if (c.includes('cloud') || c.includes('overcast') || c.includes('patchy')) return 'cloudy';
+    if (c.includes('mist') || c.includes('fog') || c.includes('haze')) return 'mist';
+    return 'sunny';
+  };
+
+  const bgType = getBackgroundType(activeData?.condition);
   const lastUpdated = cache ? new Date(cache.timestamp).toLocaleTimeString() : '';
   const isFromCache = cache ? (Date.now() - cache.timestamp < CACHE_TTL) : false;
 
@@ -456,7 +479,15 @@ export default function Home() {
             <h1 className="text-3xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">
               Apna AQI
             </h1>
-            <p className="text-white/40 text-sm font-medium">Multi-Source Intelligence</p>
+            <p className="text-white/70 text-sm font-medium">Multi-Source Intelligence</p>
+          </div>
+
+          <div className="flex-1 max-w-sm px-4">
+            <LocationSelector 
+              onSelect={(lat, lon) => getLocationAndFetch(true, { lat, lon })}
+              onReset={() => getLocationAndFetch()}
+              isManual={isManualLocation}
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -517,11 +548,11 @@ export default function Home() {
             <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-8 items-center w-full">
               <div className="flex flex-col lg:flex-row gap-8 w-full items-stretch justify-center h-full">
                 <div className="flex-1">
-                  <WeatherCard 
-                    temp={activeData.temp} 
-                    humidity={activeData.humidity} 
+                  <WeatherCard
+                    temp={activeData.temp}
+                    humidity={activeData.humidity}
                     aqi={activeData.aqi}
-                    location={activeData.location || 'Unknown'} 
+                    location={activeData.location || 'Unknown'}
                   />
                 </div>
                 <div className="flex-[1.5]">
@@ -561,10 +592,9 @@ export default function Home() {
                     </div>
                     <div className="ml-auto flex items-center gap-2">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Confidence</span>
-                      <span className={`text-sm font-black ${
-                        cache.validated.confidence_score > 0.9 ? 'text-green-400' : 
-                        cache.validated.confidence_score > 0.7 ? 'text-yellow-400' : 'text-red-400'
-                      }`}>
+                      <span className={`text-sm font-black ${cache.validated.confidence_score > 0.9 ? 'text-green-400' :
+                          cache.validated.confidence_score > 0.7 ? 'text-yellow-400' : 'text-red-400'
+                        }`}>
                         {(cache.validated.confidence_score * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -573,9 +603,9 @@ export default function Home() {
                   <div className="flex items-start gap-2 mb-6 p-3 bg-white/5 rounded-xl border border-white/5">
                     <Info size={14} className="text-white/30 mt-0.5 shrink-0" />
                     <p className="text-[11px] text-white/40 leading-relaxed">
-                      We fetch AQI from <strong className="text-white/60">multiple independent APIs</strong> and compute each source&apos;s US AQI from PM2.5 concentration. 
-                      Then we run <strong className="text-white/60">IQR (Interquartile Range)</strong> to remove statistical outliers and 
-                      <strong className="text-white/60"> Cosine Similarity</strong> to check if each source&apos;s pollutant pattern matches the group consensus. 
+                      We fetch AQI from <strong className="text-white/60">multiple independent APIs</strong> and compute each source&apos;s US AQI from PM2.5 concentration.
+                      Then we run <strong className="text-white/60">IQR (Interquartile Range)</strong> to remove statistical outliers and
+                      <strong className="text-white/60"> Cosine Similarity</strong> to check if each source&apos;s pollutant pattern matches the group consensus.
                       Sources that fail either check are discarded. The final AQI is the mean of the remaining trusted sources.
                     </p>
                   </div>
@@ -584,15 +614,13 @@ export default function Home() {
                     {cache.validated.per_source_info.map((source: SourceAQIInfo) => {
                       const providerName = PROVIDERS.find(p => p.id === source.source)?.name || source.source;
                       return (
-                        <div 
+                        <div
                           key={source.source}
-                          className={`relative p-5 rounded-2xl border transition-all ${
-                            source.used ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20 opacity-50'
-                          }`}
+                          className={`relative p-5 rounded-2xl border transition-all ${source.used ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20 opacity-50'
+                            }`}
                         >
-                          <div className={`absolute top-3 right-3 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            source.used ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-red-500/20 text-red-400 border border-red-500/20'
-                          }`}>
+                          <div className={`absolute top-3 right-3 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${source.used ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-red-500/20 text-red-400 border border-red-500/20'
+                            }`}>
                             {source.used ? <CheckCircle2 size={8} /> : <XCircle size={8} />}
                             {source.used ? 'Used' : 'Discarded'}
                           </div>
@@ -664,7 +692,7 @@ export default function Home() {
 
               <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10 backdrop-blur-sm">
                 <Database size={14} className="text-blue-400" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
                   Data Engine: <span className="text-white/80">{activeData.provider}</span>
                 </span>
               </div>

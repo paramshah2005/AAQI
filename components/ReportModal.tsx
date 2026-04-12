@@ -27,20 +27,20 @@ export function ReportModal({ isOpen, onClose, onSubmit, lat, lon }: ReportModal
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const SOURCE_OPTIONS = ['Traffic Data', 'Construction Dust', 'Industrial Smoke', 'Stubble Burning', 'Waste Burning', 'Odor / Unknown'];
-  const CATEGORIES = ['Low', 'Medium', 'High', 'Very High', 'Severe'];
+  const CATEGORIES = ['Low', 'Medium', 'High', 'Very High'];
 
   useEffect(() => {
     if (isOpen && lat && lon) {
       fetch(`/api/suburbs?lat=${lat}&lon=${lon}`)
         .then(r => r.json())
         .then(d => {
-           const list: string[] = Array.isArray(d.suburbs) && d.suburbs.length > 0 ? d.suburbs : ['Local Area'];
+           const list: string[] = Array.isArray(d.suburbs) && d.suburbs.length > 0 ? d.suburbs : ['Current Location'];
            setSuburbs(list);
            setAreaName(prev => (prev && list.includes(prev) ? prev : list[0]));
         })
         .catch(() => {
-           setSuburbs(['Local Area']);
-           setAreaName(prev => prev || 'Local Area');
+           setSuburbs(['Current Location']);
+           setAreaName(prev => prev || 'Current Location');
         });
     }
   }, [isOpen, lat, lon]);

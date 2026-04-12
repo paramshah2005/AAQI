@@ -24,17 +24,14 @@ export async function GET(request: Request) {
     if (data?.query?.geosearch) {
       fetchedSuburbs = data.query.geosearch
         .map((el: { title: string }) => el.title)
-        .filter((title: string) => !excludeKeywords.some(kw => title.toLowerCase().includes(kw.toLowerCase())));
+        .filter((title: string) => !excludeKeywords.some((kw: string) => title.toLowerCase().includes(kw.toLowerCase())));
     }
     
-    const fallback = ['Kukkikatte', 'Manipal', 'Udupi City', 'Malpe', 'Indiranagara', 'Ambalapadi'];
-    
-    // Merge Wikipedia results with local fallbacks to ensure a robust list
-    const suburbs = Array.from(new Set([...fetchedSuburbs, ...fallback]));
+    const suburbs = fetchedSuburbs.length > 0 ? fetchedSuburbs : ['Current Location'];
 
     return NextResponse.json({ suburbs });
   } catch (error) {
     console.error('Failed to fetch suburbs:', error);
-    return NextResponse.json({ suburbs: ['Kukkikatte', 'Manipal', 'Udupi City', 'Malpe', 'Indiranagara', 'Ambalapadi'] });
+    return NextResponse.json({ suburbs: ['Current Location'] });
   }
 }

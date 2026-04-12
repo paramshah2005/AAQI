@@ -55,7 +55,7 @@ export async function GET(request: Request) {
       // Magic Weather Fill-in: Borrow temp/humidity from the first available reliable source
       type WeatherObj = { temp: number; humidity: number; error?: string };
       const weatherProvider = (data['openweather'] as WeatherObj) || (data['weatherapi'] as WeatherObj) || (data['openmeteo'] as WeatherObj);
-      
+
       if (weatherProvider && !('error' in weatherProvider)) {
         Object.values(data).forEach((entry) => {
           if (typeof entry === 'object' && entry !== null && 'temp' in entry && !('error' in entry)) {
@@ -198,7 +198,7 @@ async function getOpenMeteoData(lat: string, lon: string) {
 
 async function getAreaPenalty() {
   const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000);
-  
+
   const reports = await prisma.aqiReport.findMany({
     where: {
       createdAt: { gte: twentyMinsAgo }
@@ -216,13 +216,13 @@ async function getAreaPenalty() {
   for (const [_, areaReports] of Object.entries(grouped)) {
     if (areaReports.length >= 3) {
       let totalAreaScore = 0;
-      
+
       for (const r of areaReports) {
         let reportScore = 0;
-        
+
         try {
           const sourcesObj = JSON.parse(r.sources);
-          
+
           // Normalized weights based on CPCB health guidelines (Sum = 1.0)
           const WEIGHTS: Record<string, number> = {
             'Traffic Data': 0.28,
@@ -232,24 +232,24 @@ async function getAreaPenalty() {
             'Stubble Burning': 0.10,
             'Odor / Unknown': 0.06
           };
-          
+
           Object.entries(sourcesObj as Record<string, number>).forEach(([key, val]) => {
-             if (val >= 1 && val <= 5 && WEIGHTS[key]) {
-               // score = sum(weight_i * presence_i)
-               reportScore += (WEIGHTS[key] * val);
-             }
+            if (val >= 1 && val <= 5 && WEIGHTS[key]) {
+              // score = sum(weight_i * presence_i)
+              reportScore += (WEIGHTS[key] * val);
+            }
           });
-        } catch (e) {}
+        } catch (e) { }
 
         totalAreaScore += reportScore;
       }
 
       // Max possible raw score = 1.0 * 5 = 5.0
       const avgRawScore = totalAreaScore / areaReports.length;
-      
+
       // Scale to 0-100
       const normalizedScore = (avgRawScore / 5.0) * 100;
-      
+
       if (normalizedScore > maxScoreForRegion) {
         maxScoreForRegion = normalizedScore;
       }
@@ -321,7 +321,7 @@ async function getAPINinjasData(lat: string, lon: string) {
 async function getOpenAQData(lat: string, lon: string) {
   const apiKey = process.env.OPENAQ_API_KEY;
   if (!apiKey) throw new Error('OpenAQ API Key missing - V3 requires authentication');
-  
+
   const headers = { 'X-API-Key': apiKey };
 
   // Fetch 1: Find the nearest location and its Sensor Map
@@ -331,8 +331,8 @@ async function getOpenAQData(lat: string, lon: string) {
   if (!locData.results || locData.results.length === 0) throw new Error('No OpenAQ stations nearby');
 
   const location = locData.results[0];
-  const sensors = location.sensors; 
-  
+  const sensors = location.sensors;
+
   // Map sensor IDs back to human-readable strings like 'pm25'
   interface OpenAQSensor { id: number; parameter?: { name: string, units?: string } }
   const sensorMap: Record<number, { name: string, units: string }> = {};
@@ -354,7 +354,7 @@ async function getOpenAQData(lat: string, lon: string) {
 
   interface OpenAQMeasurement { sensorsId: number; value: number }
   const measurements: Record<string, number> = {};
-  
+
   if (latestData.results && Array.isArray(latestData.results)) {
     latestData.results.forEach((r: OpenAQMeasurement) => {
       const sensorInfo = sensorMap[r.sensorsId];
@@ -367,7 +367,7 @@ async function getOpenAQData(lat: string, lon: string) {
         if (param === 'co') {
           // UI expects mg/m³
           if (unit === 'µg/m³' || unit === 'ug/m3') val = val / 1000;
-          else if (unit === 'ppb') val = val * (1.145 / 1000); 
+          else if (unit === 'ppb') val = val * (1.145 / 1000);
         } else if (param === 'no2') {
           // UI expects ppb
           if (unit.includes('g/m')) val = val / 1.88;
@@ -389,7 +389,7 @@ async function getOpenAQData(lat: string, lon: string) {
   const aqi = pm25ToUSAQI(pm25);
 
   return {
-    temp: 0, 
+    temp: 0,
     humidity: 0,
     aqi: aqi,
     pm25: measurements['pm25'],
@@ -408,12 +408,12 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
   const R = 6371; // Radius of the earth in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-    ; 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    ;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const d = R * c; // Distance in km
   return d;
 }

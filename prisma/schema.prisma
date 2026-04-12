@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
 }
 
 model AqiReport {
@@ -15,4 +14,22 @@ model AqiReport {
   category  String   // "Low", "Medium", "High", "Very High", "Severe"
   sources   String   // JSON string of sources and their 1-5 scales
   createdAt DateTime @default(now())
+}
+
+model WeatherLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  lat       Float
+  lon       Float
+  temp      Float?
+  humidity  Float?
+  aqi       Int?
+  provider  String?
+  location  String?
+  pm25      Float?
+  pm10      Float?
+  co        Float?
+  no2       Float?
+  o3        Float?
+  so2       Float?
 }
