@@ -474,7 +474,7 @@ export default function Home() {
         animate={{ opacity: 1, scale: 1 }}
         className="z-10 w-full max-w-4xl"
       >
-        <header className="flex flex-col md:flex-row items-center justify-between mb-12 gap-6 bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
+        <header className="relative z-20 flex flex-col md:flex-row items-center justify-between mb-12 gap-6 bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
           <div className="text-left">
             <h1 className="text-3xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">
               Apna AQI

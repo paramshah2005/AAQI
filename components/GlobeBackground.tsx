@@ -22,7 +22,7 @@ export function GlobeBackground({ opacity = 1, coords = null }: GlobeBackgroundP
   const globeRef = useRef<any>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [isReady, setIsReady] = useState(false);
-  const hasFlewToLocation = useRef(false);
+  const lastFlownCoords = useRef<{ lat: number; lon: number } | null>(null);
 
   // Keep globe sized to the viewport
   useEffect(() => {
@@ -44,8 +44,17 @@ export function GlobeBackground({ opacity = 1, coords = null }: GlobeBackgroundP
 
   // When coordinates arrive: stop spinning, fly to location
   useEffect(() => {
-    if (!isReady || !coords || hasFlewToLocation.current || !globeRef.current) return;
-    hasFlewToLocation.current = true;
+    if (!isReady || !coords || !globeRef.current) return;
+
+    // Only fly if coordinates have actually changed
+    if (
+      lastFlownCoords.current?.lat === coords.lat &&
+      lastFlownCoords.current?.lon === coords.lon
+    ) {
+      return;
+    }
+
+    lastFlownCoords.current = coords;
 
     // Stop auto-rotation
     const controls = globeRef.current.controls();
