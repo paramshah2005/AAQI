@@ -4,7 +4,7 @@ Apna AQI is a Next.js-based environmental dashboard that aggregates real-time ai
 
 ## Getting Started
 
-First, run the development server:
+First, run the server:
 
 ```bash
 npm run dev
